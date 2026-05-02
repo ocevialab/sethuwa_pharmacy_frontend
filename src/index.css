@@ -1,0 +1,41 @@
+/* pharmacy Logo Styles */
+.logo {
+  max-height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.logo-lg {
+  max-height: 40px;
+}
+
+.logo-sm {
+  max-height: 32px;
+}
+
+/* Ensure logo displays properly in navigation */
+.b-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.b-brand img {
+  transition: all 0.3s ease;
+}
+/* Responsive logo sizing */
+@media (max-width: 1024px) {
+  .logo {
+    max-height: 35px;
+  }
+  
+  .logo-lg {
+    max-height: 35px;
+  }
+  
+  .logo-sm {
+    max-height: 28px;
+  }
+}
+
