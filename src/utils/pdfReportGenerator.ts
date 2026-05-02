@@ -22,7 +22,7 @@ export class PDFReportGenerator {
     // Pharmacy Name
     this.doc.setFontSize(18);
     this.doc.setFont("helvetica", "bold");
-    this.doc.text("THILANKA PHARMACY", this.pageWidth / 2, this.currentY, {
+    this.doc.text("SETHUWA PHARMACY", this.pageWidth / 2, this.currentY, {
       align: "center",
     });
     this.currentY += 8;
@@ -30,19 +30,15 @@ export class PDFReportGenerator {
     // Pharmacy Info
     this.doc.setFontSize(10);
     this.doc.setFont("helvetica", "normal");
-    this.doc.text("SPC Franchise Osusala", this.pageWidth / 2, this.currentY, {
-      align: "center",
-    });
-    this.currentY += 5;
     this.doc.text(
-      "Ambagaha Junction, Dharga Town",
+      "No 47/A, Main Street, Kotiyakumbura",
       this.pageWidth / 2,
       this.currentY,
       { align: "center" }
     );
     this.currentY += 5;
     this.doc.text(
-      "034 2274976 | Registration No.: KKK-663",
+      "035 2289351 | 078 20 20 157",
       this.pageWidth / 2,
       this.currentY,
       { align: "center" }
