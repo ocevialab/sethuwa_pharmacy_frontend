@@ -22,7 +22,7 @@ export class PDFReportGenerator {
     // Pharmacy Name
     this.doc.setFontSize(18);
     this.doc.setFont("helvetica", "bold");
-    this.doc.text("SETHUWA PHARMACY", this.pageWidth / 2, this.currentY, {
+    this.doc.text("Sethsuwa PHARMACY", this.pageWidth / 2, this.currentY, {
       align: "center",
     });
     this.currentY += 8;
