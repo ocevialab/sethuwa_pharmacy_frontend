@@ -109,6 +109,8 @@ export const API_ENDPOINTS = {
     LIST: "/Inventory/all",
     ITEM_DETAILS: (productSku: string) =>
       `/Inventory/ItemDetails/${productSku}`,
+    BATCHES: (productSku: string) => `/Inventory/batches/${productSku}`,
+    BATCHES_FOR_SALE: "/Inventory/batches-for-sale",
     UPDATE_STOCK_PRICE: (stockId: number) => `/Inventory/stock/${stockId}/price`,
   },
   MEDICINE: {

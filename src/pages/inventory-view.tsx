@@ -401,6 +401,7 @@ const InventoryView: React.FC = () => {
                                             <table className="table table-hover">
                                                 <thead>
                                                     <tr>
+                                                        <th>Supplier</th>
                                                         <th>Lot Number</th>
                                                         <th>Quantity</th>
                                                         <th>Expire Date</th>
@@ -412,6 +413,11 @@ const InventoryView: React.FC = () => {
                                                 <tbody>
                                                     {itemDetails.stockBatches.map((batch) => (
                                                         <tr key={batch.stockId}>
+                                                            <td>
+                                                                <span className="fw-semibold text-primary">
+                                                                    {batch.supplierName ?? <span className="text-muted fst-italic">Unknown</span>}
+                                                                </span>
+                                                            </td>
                                                             <td className="fw-semibold">{batch.lotNumber}</td>
                                                             <td>{batch.quantityOnHand}</td>
                                                             <td>
