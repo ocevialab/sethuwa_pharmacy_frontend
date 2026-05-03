@@ -122,7 +122,7 @@ const LoginForm = ({ initialError }: LoginFormProps) => {
       <h2 className="fs-20 fw-bolder mb-4">Login</h2>
       <h4 className="fs-13 fw-bold mb-2">Login to your account</h4>
       <p className="fs-12 fw-medium text-muted">
-        Welcome to <strong>Sethuwa Pharmacy</strong> Management System. Please
+        Welcome to <strong>Sethsuwa Pharmacy</strong> Management System. Please
         enter your credentials to access the system.
       </p>
       <form onSubmit={handleSubmit} className="w-100 mt-4 pt-2">
