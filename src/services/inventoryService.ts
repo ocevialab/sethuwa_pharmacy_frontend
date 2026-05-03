@@ -8,6 +8,8 @@ export interface InventoryItem {
   unitPrice: number;
   lowStockThreshold: number;
   productType: string;
+  /** Distinct suppliers from in-stock batches (comma-separated), when returned by list API */
+  supplierSummary?: string;
   stockBatches?: StockBatch[];
 }
 
@@ -18,6 +20,8 @@ export interface StockBatch {
   costPrice: number;
   sellingPrice: number;
   lotNumber: string;
+  supplierId?: string;
+  supplierName?: string;
 }
 
 export interface InventoryItemDetails {
@@ -94,6 +98,42 @@ class InventoryService {
         throw error;
       }
       throw new Error(`Failed to fetch item details for SKU: ${productSku}`);
+    }
+  }
+
+  async getStockBatches(productSku: string): Promise<StockBatch[]> {
+    try {
+      const data = await apiService.get<StockBatch[]>(
+        API_ENDPOINTS.INVENTORY.BATCHES(productSku)
+      );
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Failed to fetch stock batches for SKU: ${productSku}`);
+    }
+  }
+
+  /** In-stock batches per SKU for POS (FEFO order). Empty SKUs omitted from the map. */
+  async getStockBatchesForSale(
+    productSkus: string[]
+  ): Promise<Record<string, StockBatch[]>> {
+    const distinct = [...new Set(productSkus.filter(Boolean))];
+    if (distinct.length === 0) {
+      return {};
+    }
+    try {
+      const data = await apiService.post<Record<string, StockBatch[]>>(
+        API_ENDPOINTS.INVENTORY.BATCHES_FOR_SALE,
+        distinct
+      );
+      return data ?? {};
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to fetch stock batches for sale");
     }
   }
 

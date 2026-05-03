@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import SalesHeader from '@/components/sales/SalesHeader';
 import SalesDashboardList from '@/components/sales/SalesDashboardList';
 import FinalizeReceiptPanel from '@/components/sales/FinalizeReceiptPanel';
+import SupplierSalesReport from '@/components/sales/SupplierSalesReport';
 import PageHeader from '@/components/shared/pageHeader/PageHeader';
 import Footer from '@/components/shared/Footer';
 

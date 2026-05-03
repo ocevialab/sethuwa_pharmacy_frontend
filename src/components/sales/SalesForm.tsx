@@ -16,6 +16,7 @@ import {
   FiX,
   FiCheckCircle,
   FiCopy,
+  FiPackage,
 } from "react-icons/fi";
 
 interface SalesFormProps {
@@ -27,7 +28,11 @@ interface CartItem extends SalesItem {
   sellingPrice?: number;
   totalQuantityOnHand?: number;
   stockId?: number;
+  lotNumber?: string;
+  supplierName?: string;
 }
+
+type SaleSearchRow = InventoryItem & { stockBatch?: StockBatch };
 
 const STORAGE_KEY = "sales_cart_items";
 
@@ -43,7 +48,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
 
   const [productSearch, setProductSearch] = useState<{
     query: string;
-    results: InventoryItem[];
+    results: SaleSearchRow[];
     showDropdown: boolean;
     selectedProduct: InventoryItem | null;
     highlightedIndex: number;
@@ -62,6 +67,16 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  // Batch picker modal state
+  const [batchPicker, setBatchPicker] = useState<{
+    show: boolean;
+    productName: string;
+    productSku: string;
+    batches: StockBatch[];
+    loading: boolean;
+  }>({ show: false, productName: "", productSku: "", batches: [], loading: false });
+
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState<{
     message: string;
@@ -124,39 +139,36 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
           pageSize: 20,
           q: query.trim(),
         });
-        
-        // Expand items with multiple stock batches into separate results
-        const expandedResults: (InventoryItem & { stockBatch?: StockBatch })[] = [];
-        
+
+        const skus = response.data.map((i) => i.productSku);
+        const batchesBySku =
+          skus.length > 0
+            ? await inventoryService.getStockBatchesForSale(skus)
+            : {};
+
+        const expandedResults: SaleSearchRow[] = [];
+
         response.data.forEach((item) => {
-          if (item.stockBatches && item.stockBatches.length > 0) {
-            // Filter batches to only include those with available stock
-            const availableBatches = item.stockBatches.filter(batch => batch.quantityOnHand > 0);
-            
-            if (availableBatches.length === 0) {
-              // If all batches have 0 stock, just show one entry
-              expandedResults.push({
-                ...item,
-                stock: 0,
-                unitPrice: item.unitPrice,
-              });
-            } else {
-              // Only show batches with available stock
-              availableBatches.forEach((batch) => {
-                expandedResults.push({
-                  ...item,
-                  stock: batch.quantityOnHand,
-                  unitPrice: batch.sellingPrice,
-                  stockBatch: batch, // Store the batch info
-                });
-              });
-            }
-          } else {
-            // If no batches, add the item as is
-            expandedResults.push(item);
+          const batches = batchesBySku[item.productSku] ?? [];
+
+          if (batches.length === 0) {
+            expandedResults.push({
+              ...item,
+              stock: item.stock,
+            });
+            return;
           }
+
+          batches.forEach((batch) => {
+            expandedResults.push({
+              ...item,
+              stock: batch.quantityOnHand,
+              unitPrice: batch.sellingPrice,
+              stockBatch: batch,
+            });
+          });
         });
-        
+
         setProductSearch((prev) => ({
           ...prev,
           results: expandedResults,
@@ -175,31 +187,92 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
     }, 300);
   };
 
-  // Handle product selection
-  const handleProductSelect = (product: InventoryItem & { stockBatch?: StockBatch }) => {
-    const price = product.unitPrice || 0;
-    setCurrentItem({
-      productSku: product.productSku,
-      quantity: 0,
-      subTotal: 0,
-      productName: product.name,
-      sellingPrice: price,
-      totalQuantityOnHand: product.stock,
-      stockId: product.stockBatch?.stockId,
-    });
-
+  // Handle product selection — when a batch row was chosen in search, apply it directly; otherwise load batches (fallback)
+  const handleProductSelect = async (product: SaleSearchRow) => {
     setProductSearch({
-      query: product.name,
+      query: product.stockBatch
+        ? `${product.name} (${product.stockBatch.lotNumber || `Lot #${product.stockBatch.stockId}`})`
+        : product.name,
       results: [],
       showDropdown: false,
       selectedProduct: product,
       highlightedIndex: -1,
     });
 
-    // Auto-focus quantity field after a short delay to ensure DOM is updated
-    setTimeout(() => {
-      quantityInputRef.current?.focus();
-    }, 100);
+    if (product.stockBatch) {
+      const b = product.stockBatch;
+      setCurrentItem({
+        productSku: product.productSku,
+        quantity: 1,
+        subTotal: 0,
+        productName: product.name,
+        sellingPrice: b.sellingPrice,
+        totalQuantityOnHand: b.quantityOnHand,
+        stockId: b.stockId,
+        lotNumber: b.lotNumber,
+        supplierName: b.supplierName ?? undefined,
+      });
+      setBatchPicker((prev) => ({ ...prev, loading: false, show: false }));
+      setTimeout(() => quantityInputRef.current?.focus(), 100);
+      return;
+    }
+
+    // No batch on row (out of stock line): still allow flow but stock must be validated
+    setCurrentItem({
+      productSku: product.productSku,
+      quantity: 1,
+      subTotal: 0,
+      productName: product.name,
+      sellingPrice: product.unitPrice || 0,
+      totalQuantityOnHand: product.stock,
+    });
+
+    setBatchPicker((prev) => ({ ...prev, loading: true, show: false }));
+    try {
+      const batches = await inventoryService.getStockBatches(product.productSku);
+      const available = batches.filter((b) => b.quantityOnHand > 0);
+
+      if (available.length === 0) {
+        setTimeout(() => quantityInputRef.current?.focus(), 100);
+        setBatchPicker((prev) => ({ ...prev, loading: false }));
+      } else if (available.length === 1) {
+        const b = available[0];
+        setCurrentItem((prev) => ({
+          ...prev,
+          stockId: b.stockId,
+          sellingPrice: b.sellingPrice,
+          totalQuantityOnHand: b.quantityOnHand,
+          lotNumber: b.lotNumber,
+          supplierName: b.supplierName ?? undefined,
+        }));
+        setBatchPicker((prev) => ({ ...prev, loading: false }));
+        setTimeout(() => quantityInputRef.current?.focus(), 100);
+      } else {
+        setBatchPicker({
+          show: true,
+          productName: product.name,
+          productSku: product.productSku,
+          batches: available,
+          loading: false,
+        });
+      }
+    } catch {
+      setBatchPicker((prev) => ({ ...prev, loading: false }));
+      setTimeout(() => quantityInputRef.current?.focus(), 100);
+    }
+  };
+
+  const handleBatchSelect = (batch: StockBatch) => {
+    setCurrentItem(prev => ({
+      ...prev,
+      stockId: batch.stockId,
+      sellingPrice: batch.sellingPrice,
+      totalQuantityOnHand: batch.quantityOnHand,
+      lotNumber: batch.lotNumber,
+      supplierName: batch.supplierName ?? undefined,
+    }));
+    setBatchPicker(prev => ({ ...prev, show: false }));
+    setTimeout(() => quantityInputRef.current?.focus(), 100);
   };
 
   // Close dropdown when clicking outside
@@ -277,7 +350,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
 
       // Prepare items for API (remove display-only fields, keep stockId for batch-specific deduction)
       const apiItems: SalesItem[] = items.map(
-        ({ productName, sellingPrice, totalQuantityOnHand, ...item }) => item
+        ({ productName, sellingPrice, totalQuantityOnHand, lotNumber, supplierName, ...item }) => item
       );
 
       const receiptData: CreateReceiptRequest = {
@@ -533,6 +606,8 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
         quantity: 0,
         subTotal: 0,
         totalQuantityOnHand: undefined,
+        lotNumber: undefined,
+        supplierName: undefined,
       });
       setProductSearch({
         query: "",
@@ -618,7 +693,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                         ref={productSearchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search product (min 2 characters)..."
+                        placeholder="Search product — each stock batch is listed separately (oldest expiry first)..."
                         value={productSearch.query}
                         onChange={(e) => {
                           handleProductSearch(e.target.value);
@@ -702,7 +777,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                           }}
                         >
                           {productSearch.results.map((product, index) => {
-                            const batch = (product as InventoryItem & { stockBatch?: StockBatch }).stockBatch;
+                            const batch = product.stockBatch;
                             const displayKey = batch 
                               ? `${product.productSku}-${batch.stockId}` 
                               : product.productSku;
@@ -746,9 +821,15 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                                       <span className="text-muted small">SKU: <span className="text-dark">{product.productSku}</span></span>
                                       {batch && (
                                         <>
+                                          {batch.supplierName && (
+                                            <span className="text-muted small">Supplier: <span className="text-primary fw-semibold">{batch.supplierName}</span></span>
+                                          )}
                                           <span className="text-muted small">Lot: <span className="text-dark">{batch.lotNumber}</span></span>
                                           <span className="text-muted small">Exp: <span className="text-dark">{new Date(batch.expireDate).toLocaleDateString()}</span></span>
                                         </>
+                                      )}
+                                      {!batch && product.supplierSummary && (
+                                        <span className="text-muted small">Supplier: <span className="text-primary fw-semibold">{product.supplierSummary}</span></span>
                                       )}
                                       <span className="text-muted small">{product.productType}</span>
                                       <span
@@ -788,12 +869,21 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                         : "alert-info"
                     }`}
                   >
-                    <div className="d-flex justify-content-between align-items-center">
-                      <div>
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div className="flex-grow-1">
                         <strong>{currentItem.productName}</strong>
-                        <div className="small text-muted">
-                          SKU: {currentItem.productSku}
-                        </div>
+                        <div className="small text-muted">SKU: {currentItem.productSku}</div>
+                        {currentItem.supplierName && (
+                          <div className="small mt-1">
+                            <FiPackage size={12} className="me-1" />
+                            <span className="fw-semibold">Supplier:</span> {currentItem.supplierName}
+                          </div>
+                        )}
+                        {currentItem.lotNumber && (
+                          <div className="small">
+                            <span className="fw-semibold">Batch/Lot:</span> {currentItem.lotNumber}
+                          </div>
+                        )}
                         <div
                           className={`small mt-1 ${
                             (currentItem.totalQuantityOnHand || 0) <= 0
@@ -803,11 +893,8 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                               : "text-success"
                           }`}
                         >
-                          Available Stock:{" "}
-                          {currentItem.totalQuantityOnHand || 0}{" "}
-                          {(currentItem.totalQuantityOnHand || 0) <= 0
-                            ? "(Out of Stock)"
-                            : ""}
+                          Available Stock: {currentItem.totalQuantityOnHand || 0}{" "}
+                          {(currentItem.totalQuantityOnHand || 0) <= 0 ? "(Out of Stock)" : ""}
                         </div>
                       </div>
                       <button
@@ -1007,6 +1094,13 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                                   <div className="small text-muted">
                                     SKU: {item.productSku}
                                   </div>
+                                  {item.supplierName && (
+                                    <div className="small text-primary">
+                                      <FiPackage size={11} className="me-1" />
+                                      {item.supplierName}
+                                      {item.lotNumber ? ` · ${item.lotNumber}` : ""}
+                                    </div>
+                                  )}
                                 </div>
                                 <button
                                   type="button"
@@ -1186,6 +1280,100 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
           </form>
         </div>
       </div>
+
+      {/* Batch loading indicator */}
+      {batchPicker.loading && (
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 2000, background: "rgba(0,0,0,0.3)" }}>
+          <div className="bg-white rounded p-4 text-center shadow">
+            <div className="spinner-border text-primary mb-2" role="status" />
+            <div className="small">Loading batches...</div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Picker Modal */}
+      {batchPicker.show && (
+        <>
+          <div
+            className="modal fade show"
+            style={{ display: "block" }}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title fw-bold">
+                    <FiPackage className="me-2" />
+                    Select Batch — {batchPicker.productName}
+                  </h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setBatchPicker(prev => ({ ...prev, show: false }))}
+                    aria-label="Close"
+                  />
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted small mb-3">
+                    Multiple supplier batches are available for this product. Select which batch to sell from.
+                  </p>
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Supplier</th>
+                          <th>Batch / Lot</th>
+                          <th>Available</th>
+                          <th>Expiry</th>
+                          <th>Price (LKR)</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batchPicker.batches.map((batch) => {
+                          const expiry = new Date(batch.expireDate);
+                          const daysUntilExpiry = Math.ceil((expiry.getTime() - Date.now()) / 86400000);
+                          const expiryClass = daysUntilExpiry < 30 ? "text-danger fw-bold" : daysUntilExpiry < 90 ? "text-warning" : "text-dark";
+                          return (
+                            <tr key={batch.stockId}>
+                              <td>
+                                <span className="fw-semibold">{batch.supplierName ?? "Unknown"}</span>
+                              </td>
+                              <td><code>{batch.lotNumber}</code></td>
+                              <td>
+                                <span className={batch.quantityOnHand < 10 ? "text-warning fw-semibold" : "text-success fw-semibold"}>
+                                  {batch.quantityOnHand} units
+                                </span>
+                              </td>
+                              <td className={expiryClass}>
+                                {expiry.toLocaleDateString()}
+                                {daysUntilExpiry < 30 && <div className="small">(expires soon)</div>}
+                              </td>
+                              <td>{batch.sellingPrice.toLocaleString()}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => handleBatchSelect(batch)}
+                                >
+                                  Select
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop fade show" style={{ zIndex: 1040 }} onClick={() => setBatchPicker(prev => ({ ...prev, show: false }))} />
+        </>
+      )}
 
       {/* Receipt Success Modal */}
       {showReceiptModal && receiptData && (

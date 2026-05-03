@@ -152,6 +152,20 @@ export interface SalesListParams {
   q?: string;
 }
 
+export interface SupplierSalesSummaryItem {
+  supplierId: string;
+  supplierName: string;
+  totalUnitsSold: number;
+  totalRevenue: number;
+  batchCount: number;
+}
+
+export interface SupplierSalesSummaryResponse {
+  fromDate: string | null;
+  toDate: string | null;
+  data: SupplierSalesSummaryItem[];
+}
+
 export interface SalesSummaryToday {
   businessDate: string;
   totalSalesToday: number;
@@ -349,6 +363,23 @@ class SalesService {
         throw error;
       }
       throw new Error("Failed to fetch sales");
+    }
+  }
+
+  async getSalesBySupplier(
+    fromDate?: string,
+    toDate?: string
+  ): Promise<SupplierSalesSummaryResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (fromDate) params.append("fromDate", fromDate);
+      if (toDate) params.append("toDate", toDate);
+      const url = `/Sales/summary/by-supplier${params.toString() ? `?${params.toString()}` : ""}`;
+      const data = await apiService.get<SupplierSalesSummaryResponse>(url);
+      return data;
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error("Failed to fetch sales by supplier");
     }
   }
 

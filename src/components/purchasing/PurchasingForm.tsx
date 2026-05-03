@@ -1372,6 +1372,8 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                                         <div className="text-muted small">
                                           SKU: {product.productSku}
                                           {` | ${product.productType}`}
+                                          {product.supplierSummary &&
+                                            ` | Supplier: ${product.supplierSummary}`}
                                           {product.unitPrice > 0 &&
                                             ` | LKR ${product.unitPrice.toFixed(
                                               2
