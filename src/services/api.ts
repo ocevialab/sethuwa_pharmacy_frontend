@@ -178,6 +178,31 @@ class ApiService {
   }
 
   /**
+   * POST multipart/form-data (e.g. file upload). Do not set Content-Type manually.
+   */
+  async postMultipart<T>(
+    endpoint: string,
+    formData: FormData,
+    options?: RequestOptions
+  ): Promise<T> {
+    const { skipAuth = false, ...fetchOptions } = options ?? {};
+    const token = tokenManager.getToken();
+    const url = `${this.baseURL}${endpoint}`;
+    const { headers: extraHeaders, ...restFetch } = fetchOptions;
+    const headers: HeadersInit = {
+      ...(token && !skipAuth ? { Authorization: `Bearer ${token}` } : {}),
+      ...(extraHeaders ?? {}),
+    };
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+      ...restFetch,
+    });
+    return this.handleResponse<T>(response, skipAuth);
+  }
+
+  /**
    * PUT request
    */
   async put<T>(

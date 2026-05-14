@@ -6,10 +6,15 @@ import {
   FiEdit3,
   FiSearch,
   FiRefreshCw,
+  FiUpload,
 } from "react-icons/fi";
 import Dropdown from "@/components/shared/Dropdown";
 import { useNavigate, Link } from "react-router-dom";
-import { medicineService, Medicine } from "@/services/medicineService";
+import {
+  medicineService,
+  Medicine,
+  MedicineExcelBulkUpdateSummary,
+} from "@/services/medicineService";
 import Swal from "sweetalert2";
 import {
   flexRender,
@@ -17,6 +22,40 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { FaSort, FaSortDown, FaSortUp } from "react-icons/fa";
+
+function downloadMedicineImportReportCsv(
+  summary: MedicineExcelBulkUpdateSummary
+): void {
+  const esc = (cell: string) => {
+    const s = cell.replace(/"/g, '""');
+    if (/[",\r\n]/.test(s)) return `"${s}"`;
+    return s;
+  };
+  const header = ["Row", "MedicineId", "Status", "Message"];
+  const lines = [header.join(",")];
+  for (const r of summary.rows) {
+    lines.push(
+      [
+        String(r.rowNumber),
+        esc(r.medicineId ?? ""),
+        esc(r.status),
+        esc(r.message),
+      ].join(",")
+    );
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+  a.href = url;
+  a.download = `medicine-import-report-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // Separate component for checkbox header to avoid hooks issues
 const CheckboxHeader = ({ table }: any) => {
@@ -43,6 +82,8 @@ const MedicineTable: React.FC = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [allMedicines, setAllMedicines] = useState<Medicine[]>([]); // Store all medicines for searching
   const [loading, setLoading] = useState(true);
+  const [excelImporting, setExcelImporting] = useState(false);
+  const excelInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -638,6 +679,75 @@ const MedicineTable: React.FC = () => {
     );
   };
 
+  const handleExcelImportClick = () => {
+    excelInputRef.current?.click();
+  };
+
+  const handleExcelFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setExcelImporting(true);
+    void Swal.fire({
+      title: "Importing medicines…",
+      text: "Please wait; this may take a while for large files.",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const summary = await medicineService.bulkUpdateFromExcel(file);
+      const errLines = summary.rows
+        .filter((r) => r.status === "Error")
+        .slice(0, 20)
+        .map(
+          (r) =>
+            `Row ${r.rowNumber} (${r.medicineId ?? "?"}): ${r.message}`
+        )
+        .join("\n");
+
+      Swal.close();
+      await Swal.fire({
+        icon: summary.errorCount > 0 ? "warning" : "success",
+        title: "Excel import finished",
+        text: `Success: ${summary.successCount}, errors: ${summary.errorCount}, skipped: ${summary.skippedCount}.${errLines ? "\n\n" + errLines : ""}`,
+        width: 560,
+      });
+
+      if (summary.rows.length > 0) {
+        downloadMedicineImportReportCsv(summary);
+      }
+
+      if (summary.successCount > 0) {
+        fetchMedicines(
+          pagination.page,
+          pagination.pageSize,
+          filters,
+          sorting
+        );
+        fetchAllMedicines();
+      }
+    } catch (err) {
+      Swal.close();
+      await Swal.fire({
+        icon: "error",
+        title: "Import failed",
+        text:
+          err instanceof Error ? err.message : "Failed to import from Excel",
+      });
+    } finally {
+      Swal.close();
+      setExcelImporting(false);
+    }
+  };
+
   // Generate page numbers
   const totalPages = pagination.totalPages;
   const currentPageNum = pagination.page;
@@ -848,6 +958,22 @@ const MedicineTable: React.FC = () => {
                     />
                   </div>
                 </form>
+                <input
+                  ref={excelInputRef}
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="d-none"
+                  onChange={handleExcelFileSelected}
+                />
+                <button
+                  type="button"
+                  className="btn btn-icon btn-light-brand"
+                  onClick={handleExcelImportClick}
+                  disabled={excelImporting}
+                  title="Update medicines from Excel (.xlsx)"
+                >
+                  <FiUpload size={16} strokeWidth={1.6} />
+                </button>
                 <button
                   type="button"
                   className="btn btn-icon btn-light-brand"

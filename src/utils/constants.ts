@@ -119,6 +119,7 @@ export const API_ENDPOINTS = {
     DELETED: "/Medicine/deleted",
     RESTORE: (id: string) => `/Medicine/restore/${id}`,
     SUMMARY: "/Medicine/summary",
+    BULK_UPDATE_EXCEL: "/Medicine/bulk-update-from-excel",
   },
   PURCHASING: {
     BASE: "/Purchasing",

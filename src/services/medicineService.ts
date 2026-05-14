@@ -66,6 +66,21 @@ export interface MedicineSummary {
     nonPrescription: number;
 }
 
+export interface MedicineExcelBulkUpdateRowResult {
+    rowNumber: number;
+    medicineId?: string | null;
+    status: string;
+    message: string;
+}
+
+export interface MedicineExcelBulkUpdateSummary {
+    totalRows: number;
+    successCount: number;
+    errorCount: number;
+    skippedCount: number;
+    rows: MedicineExcelBulkUpdateRowResult[];
+}
+
 class MedicineService {
     async getAllMedicines(params?: MedicineListParams): Promise<MedicineListResponse> {
         try {
@@ -181,6 +196,22 @@ class MedicineService {
                 throw error;
             }
             throw new Error('Failed to fetch medicine summary');
+        }
+    }
+
+    async bulkUpdateFromExcel(file: File): Promise<MedicineExcelBulkUpdateSummary> {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            return await apiService.postMultipart<MedicineExcelBulkUpdateSummary>(
+                API_ENDPOINTS.MEDICINE.BULK_UPDATE_EXCEL,
+                formData
+            );
+        } catch (error) {
+            if (error instanceof Error) {
+                throw error;
+            }
+            throw new Error('Failed to import medicines from Excel');
         }
     }
 }
