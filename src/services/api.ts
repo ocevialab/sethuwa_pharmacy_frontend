@@ -218,6 +218,74 @@ class ApiService {
   }
 
   /**
+   * GET binary response (e.g. PDF download). Uses XHR for reliable blob transfer.
+   */
+  async getBlob(endpoint: string, options?: RequestOptions): Promise<Blob> {
+    const { skipAuth = false } = options ?? {};
+    const token = tokenManager.getToken();
+    const url = `${this.baseURL}${endpoint}`;
+
+    return new Promise<Blob>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", url, true);
+      xhr.responseType = "blob";
+
+      if (token && !skipAuth) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+
+      xhr.onload = () => {
+        const blob = xhr.response as Blob;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(blob);
+          return;
+        }
+
+        const readError = () => {
+          const message =
+            xhr.status === 403
+              ? "You do not have permission to access this resource."
+              : xhr.status === 401
+                ? "Session expired. Please login again."
+                : xhr.statusText || "Download failed";
+          reject(new Error(message));
+        };
+
+        if (blob && blob.size > 0) {
+          blob.text().then((text) => {
+            try {
+              const data = JSON.parse(text);
+              reject(
+                new Error(
+                  data.message ||
+                    data.error ||
+                    data.detail ||
+                    data.title ||
+                    text ||
+                    xhr.statusText
+                )
+              );
+            } catch {
+              reject(new Error(text.trim() || xhr.statusText || "Download failed"));
+            }
+          }, readError);
+        } else {
+          readError();
+        }
+      };
+
+      xhr.onerror = () =>
+        reject(
+          new Error(
+            "Could not download the file. Check that the API is running and try again."
+          )
+        );
+      xhr.onabort = () => reject(new Error("Download was cancelled"));
+      xhr.send();
+    });
+  }
+
+  /**
    * DELETE request
    */
   async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {

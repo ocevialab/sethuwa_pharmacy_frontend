@@ -10,6 +10,7 @@ export interface InventoryItem {
   productType: string;
   /** Distinct suppliers from in-stock batches (comma-separated), when returned by list API */
   supplierSummary?: string;
+  barcode?: string;
   stockBatches?: StockBatch[];
 }
 

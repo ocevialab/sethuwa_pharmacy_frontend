@@ -7,6 +7,7 @@ import {
   Purchase,
 } from "@/services/purchasingService";
 import { inventoryService, InventoryItem } from "@/services/inventoryService";
+import BarcodeLabelActions from "@/components/medicine/BarcodeLabelActions";
 import {
   supplierService,
   SupplierSearchResult,
@@ -1401,6 +1402,34 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                                 </div>
                               )}
                           </div>
+                          {currentItemSearch.selectedProduct?.productType ===
+                            "Medicine" && (
+                            <BarcodeLabelActions
+                              medicineId={
+                                currentItemSearch.selectedProduct.productSku
+                              }
+                              medicineName={
+                                currentItemSearch.selectedProduct.name
+                              }
+                              barcode={
+                                currentItemSearch.selectedProduct.barcode
+                              }
+                              onBarcodeChange={(value) => {
+                                setCurrentItemSearch((prev) =>
+                                  prev.selectedProduct
+                                    ? {
+                                        ...prev,
+                                        selectedProduct: {
+                                          ...prev.selectedProduct,
+                                          barcode: value,
+                                        },
+                                      }
+                                    : prev
+                                );
+                              }}
+                              disabled={loading}
+                            />
+                          )}
                         </div>
 
                         <div className="col-md-2">

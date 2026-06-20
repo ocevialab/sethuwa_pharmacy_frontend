@@ -81,6 +81,13 @@ export interface MedicineExcelBulkUpdateSummary {
     rows: MedicineExcelBulkUpdateRowResult[];
 }
 
+export interface MedicineBarcodeResult {
+    medicineId: string;
+    productSku: string;
+    barcode: string;
+    medicineName?: string;
+}
+
 class MedicineService {
     async getAllMedicines(params?: MedicineListParams): Promise<MedicineListResponse> {
         try {
@@ -212,6 +219,64 @@ class MedicineService {
                 throw error;
             }
             throw new Error('Failed to import medicines from Excel');
+        }
+    }
+
+    async generateBarcode(medicineId: string): Promise<MedicineBarcodeResult> {
+        try {
+            return await apiService.post<MedicineBarcodeResult>(
+                API_ENDPOINTS.MEDICINE.GENERATE_BARCODE(medicineId),
+                {}
+            );
+        } catch (error) {
+            if (error instanceof Error) {
+                throw error;
+            }
+            throw new Error('Failed to generate barcode');
+        }
+    }
+
+    private pdfDownloadPromise: Promise<void> | null = null;
+
+    async downloadBarcodeLabelsPdf(medicineId: string, fallbackName: string): Promise<void> {
+        if (this.pdfDownloadPromise) {
+            return this.pdfDownloadPromise;
+        }
+
+        this.pdfDownloadPromise = this.downloadBarcodeLabelsPdfInternal(
+            medicineId,
+            fallbackName
+        ).finally(() => {
+            this.pdfDownloadPromise = null;
+        });
+
+        return this.pdfDownloadPromise;
+    }
+
+    private async downloadBarcodeLabelsPdfInternal(
+        medicineId: string,
+        fallbackName: string
+    ): Promise<void> {
+        try {
+            const blob = await apiService.getBlob(
+                API_ENDPOINTS.MEDICINE.BARCODE_LABELS_PDF(medicineId)
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safe = fallbackName.replace(/[^\w\s-]/g, '').trim() || 'medicine';
+            a.href = url;
+            a.download = `${safe}-barcode-labels.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 250);
+        } catch (error) {
+            if (error instanceof Error) {
+                throw error;
+            }
+            throw new Error('Failed to download barcode labels');
         }
     }
 }

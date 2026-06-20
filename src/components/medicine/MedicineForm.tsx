@@ -8,6 +8,7 @@ import {
 import Swal from "sweetalert2";
 import { FiPackage, FiEdit3 } from "react-icons/fi";
 import BarcodeInput from "@/components/shared/BarcodeInput";
+import BarcodeLabelActions from "@/components/medicine/BarcodeLabelActions";
 
 interface MedicineFormProps {
   onSuccess?: () => void;
@@ -37,6 +38,11 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
   >({});
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [savedMedicineId, setSavedMedicineId] = useState<string | null>(editId);
+
+  useEffect(() => {
+    if (editId) setSavedMedicineId(editId);
+  }, [editId]);
 
   // Fetch medicine data in edit mode
   useEffect(() => {
@@ -92,6 +98,42 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const buildSubmitData = (): CreateMedicineRequest => ({
+    ...formData,
+    barcode: formData.barcode?.trim() || undefined,
+  });
+
+  /** Save or create medicine; used by barcode actions and returns medicine id */
+  const ensureMedicineSaved = async (): Promise<string> => {
+    if (!validateForm()) {
+      throw new Error("Medicine name is required before saving a barcode.");
+    }
+
+    const submitData = buildSubmitData();
+
+    if (savedMedicineId) {
+      await medicineService.updateMedicine(
+        savedMedicineId,
+        submitData as UpdateMedicineRequest
+      );
+      return savedMedicineId;
+    }
+
+    const created = await medicineService.createMedicine(submitData);
+    const newId = created.medicineId;
+    if (!newId) {
+      throw new Error("Medicine was saved but no ID was returned.");
+    }
+
+    setSavedMedicineId(newId);
+    window.history.replaceState(
+      null,
+      "",
+      `/medicine/create?edit=${encodeURIComponent(newId)}`
+    );
+    return newId;
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -102,15 +144,11 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
     try {
       setLoading(true);
 
-      // Prepare data: convert empty barcode string to undefined
-      const submitData = {
-        ...formData,
-        barcode: formData.barcode?.trim() || undefined,
-      };
+      const submitData = buildSubmitData();
 
-      if (isEditMode && editId) {
+      if (savedMedicineId) {
         await medicineService.updateMedicine(
-          editId,
+          savedMedicineId,
           submitData as UpdateMedicineRequest
         );
         Swal.fire({
@@ -120,8 +158,17 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
           timer: 2000,
           showConfirmButton: false,
         });
+
+        if (onSuccess) {
+          onSuccess();
+        }
+        return;
       } else {
-        await medicineService.createMedicine(submitData);
+        const created = await medicineService.createMedicine(submitData);
+        const newId = created.medicineId ?? null;
+        if (newId) {
+          setSavedMedicineId(newId);
+        }
         Swal.fire({
           icon: "success",
           title: "Success",
@@ -129,12 +176,15 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
           timer: 2000,
           showConfirmButton: false,
         });
-      }
 
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        navigate("/medicine/list");
+        if (onSuccess) {
+          onSuccess();
+        } else if (newId) {
+          navigate(`/medicine/create?edit=${newId}`, { replace: true });
+        } else {
+          navigate("/medicine/list");
+        }
+        return;
       }
     } catch (error) {
       Swal.fire({
@@ -394,9 +444,19 @@ const MedicineForm: React.FC<MedicineFormProps> = ({ onSuccess }) => {
                   <div className="invalid-feedback">{errors.barcode}</div>
                 )}
                 <small className="form-text text-muted">
-                  You can enter barcode manually, use a barcode scanner, or scan
-                  with camera
+                  Scan with camera, type manually, or use a USB scanner — the value
+                  appears in this field.
                 </small>
+                <BarcodeLabelActions
+                  medicineId={savedMedicineId}
+                  medicineName={formData.name}
+                  barcode={formData.barcode}
+                  onBarcodeChange={(value) =>
+                    setFormData((prev) => ({ ...prev, barcode: value }))
+                  }
+                  onEnsureSaved={ensureMedicineSaved}
+                  disabled={loading || fetching}
+                />
               </div>
 
               <div className="col-md-6 mb-3">

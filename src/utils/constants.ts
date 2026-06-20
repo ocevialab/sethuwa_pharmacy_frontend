@@ -120,6 +120,8 @@ export const API_ENDPOINTS = {
     RESTORE: (id: string) => `/Medicine/restore/${id}`,
     SUMMARY: "/Medicine/summary",
     BULK_UPDATE_EXCEL: "/Medicine/bulk-update-from-excel",
+    GENERATE_BARCODE: (id: string) => `/Medicine/${id}/barcode/generate`,
+    BARCODE_LABELS_PDF: (id: string) => `/Medicine/${id}/barcode/labels`,
   },
   PURCHASING: {
     BASE: "/Purchasing",
