@@ -57,6 +57,13 @@ export interface UpdateStockPriceRequest {
   sellingPrice: number;
 }
 
+export interface ProductBarcodeResult {
+  productSku: string;
+  barcode?: string | null;
+  productName?: string;
+  productType?: string;
+}
+
 class InventoryService {
   async getInventoryList(
     params?: InventoryListParams
@@ -152,6 +159,86 @@ class InventoryService {
         throw error;
       }
       throw new Error(`Failed to update stock price for stock ID: ${stockId}`);
+    }
+  }
+
+  async updateProductBarcode(
+    productSku: string,
+    barcode: string | null
+  ): Promise<ProductBarcodeResult> {
+    try {
+      return await apiService.put<ProductBarcodeResult>(
+        API_ENDPOINTS.INVENTORY.UPDATE_BARCODE(productSku),
+        { barcode: barcode?.trim() || null }
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to update product barcode");
+    }
+  }
+
+  async generateProductBarcode(
+    productSku: string
+  ): Promise<ProductBarcodeResult> {
+    try {
+      return await apiService.post<ProductBarcodeResult>(
+        API_ENDPOINTS.INVENTORY.GENERATE_BARCODE(productSku),
+        {}
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to generate product barcode");
+    }
+  }
+
+  private pdfDownloadPromise: Promise<void> | null = null;
+
+  async downloadProductBarcodeLabelsPdf(
+    productSku: string,
+    fallbackName: string
+  ): Promise<void> {
+    if (this.pdfDownloadPromise) {
+      return this.pdfDownloadPromise;
+    }
+
+    this.pdfDownloadPromise = this.downloadProductBarcodeLabelsPdfInternal(
+      productSku,
+      fallbackName
+    ).finally(() => {
+      this.pdfDownloadPromise = null;
+    });
+
+    return this.pdfDownloadPromise;
+  }
+
+  private async downloadProductBarcodeLabelsPdfInternal(
+    productSku: string,
+    fallbackName: string
+  ): Promise<void> {
+    try {
+      const blob = await apiService.getBlob(
+        API_ENDPOINTS.INVENTORY.BARCODE_LABELS_PDF(productSku)
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safe = fallbackName.replace(/[^\w\s-]/g, "").trim() || "product";
+      a.href = url;
+      a.download = `${safe}-barcode-labels.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 250);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to download barcode labels");
     }
   }
 }

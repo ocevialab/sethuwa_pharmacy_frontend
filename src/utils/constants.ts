@@ -112,6 +112,11 @@ export const API_ENDPOINTS = {
     BATCHES: (productSku: string) => `/Inventory/batches/${productSku}`,
     BATCHES_FOR_SALE: "/Inventory/batches-for-sale",
     UPDATE_STOCK_PRICE: (stockId: number) => `/Inventory/stock/${stockId}/price`,
+    UPDATE_BARCODE: (productSku: string) => `/Inventory/${productSku}/barcode`,
+    GENERATE_BARCODE: (productSku: string) =>
+      `/Inventory/${productSku}/barcode/generate`,
+    BARCODE_LABELS_PDF: (productSku: string) =>
+      `/Inventory/${productSku}/barcode/labels`,
   },
   MEDICINE: {
     BASE: "/Medicine",

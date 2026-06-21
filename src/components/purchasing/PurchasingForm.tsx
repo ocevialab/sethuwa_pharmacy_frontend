@@ -8,6 +8,7 @@ import {
 } from "@/services/purchasingService";
 import { inventoryService, InventoryItem } from "@/services/inventoryService";
 import BarcodeLabelActions from "@/components/medicine/BarcodeLabelActions";
+import BarcodeInput from "@/components/shared/BarcodeInput";
 import {
   supplierService,
   SupplierSearchResult,
@@ -1402,33 +1403,53 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                                 </div>
                               )}
                           </div>
-                          {currentItemSearch.selectedProduct?.productType ===
-                            "Medicine" && (
-                            <BarcodeLabelActions
-                              medicineId={
-                                currentItemSearch.selectedProduct.productSku
-                              }
-                              medicineName={
-                                currentItemSearch.selectedProduct.name
-                              }
-                              barcode={
-                                currentItemSearch.selectedProduct.barcode
-                              }
-                              onBarcodeChange={(value) => {
-                                setCurrentItemSearch((prev) =>
-                                  prev.selectedProduct
-                                    ? {
-                                        ...prev,
-                                        selectedProduct: {
-                                          ...prev.selectedProduct,
-                                          barcode: value,
-                                        },
-                                      }
-                                    : prev
-                                );
-                              }}
-                              disabled={loading}
-                            />
+                          {currentItemSearch.selectedProduct && (
+                            <div className="mt-2">
+                              <label className="form-label mb-1">Barcode</label>
+                              <BarcodeInput
+                                value={currentItemSearch.selectedProduct.barcode ?? ""}
+                                onChange={(value) => {
+                                  setCurrentItemSearch((prev) =>
+                                    prev.selectedProduct
+                                      ? {
+                                          ...prev,
+                                          selectedProduct: {
+                                            ...prev.selectedProduct,
+                                            barcode: value,
+                                          },
+                                        }
+                                      : prev
+                                  );
+                                }}
+                                placeholder="Scan or enter product barcode"
+                                disabled={loading}
+                              />
+                              <BarcodeLabelActions
+                                productSku={
+                                  currentItemSearch.selectedProduct.productSku
+                                }
+                                medicineName={
+                                  currentItemSearch.selectedProduct.name
+                                }
+                                barcode={
+                                  currentItemSearch.selectedProduct.barcode
+                                }
+                                onBarcodeChange={(value) => {
+                                  setCurrentItemSearch((prev) =>
+                                    prev.selectedProduct
+                                      ? {
+                                          ...prev,
+                                          selectedProduct: {
+                                            ...prev.selectedProduct,
+                                            barcode: value,
+                                          },
+                                        }
+                                      : prev
+                                  );
+                                }}
+                                disabled={loading}
+                              />
+                            </div>
                           )}
                         </div>
 

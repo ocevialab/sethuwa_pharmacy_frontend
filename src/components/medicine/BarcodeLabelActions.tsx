@@ -2,19 +2,23 @@ import React, { useRef, useState } from "react";
 import { FiDownload } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { medicineService } from "@/services/medicineService";
+import { inventoryService } from "@/services/inventoryService";
 
 interface BarcodeLabelActionsProps {
-  /** Current medicine id if already saved; may be null on create until first save */
+  /** When set, uses Inventory product barcode APIs (purchasing, any product type). */
+  productSku?: string | null;
+  /** Medicine id for medicine create/edit flows. Ignored when productSku is set. */
   medicineId?: string | null;
   medicineName?: string;
   barcode?: string | null;
   onBarcodeChange?: (barcode: string) => void;
-  /** Save/create medicine and return its id (required before generate/download) */
+  /** Save/create medicine and return its id (medicine form create flow). */
   onEnsureSaved?: () => Promise<string>;
   disabled?: boolean;
 }
 
 const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
+  productSku,
   medicineId,
   medicineName,
   barcode,
@@ -24,7 +28,11 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
 }) => {
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const actionInFlight = useRef(false);
+
+  const useProductApi = Boolean(productSku?.trim());
+  const displayName = medicineName ?? "product";
 
   const runOnce = async (fn: () => Promise<void>) => {
     if (actionInFlight.current) return;
@@ -44,12 +52,62 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
     return onEnsureSaved();
   };
 
+  const persistBarcode = async (value: string, sku: string): Promise<void> => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error("Barcode cannot be empty.");
+    }
+    await inventoryService.updateProductBarcode(sku, trimmed);
+  };
+
+  const downloadLabels = async (skuOrId: string, name: string) => {
+    if (useProductApi) {
+      await inventoryService.downloadProductBarcodeLabelsPdf(skuOrId, name);
+      return;
+    }
+    await medicineService.downloadBarcodeLabelsPdf(skuOrId, name);
+  };
+
+  const handleSaveBarcode = async () => {
+    if (!barcode?.trim()) {
+      await Swal.fire({
+        icon: "info",
+        title: "No barcode",
+        text: "Enter or scan a barcode first, or use Generate barcode.",
+      });
+      return;
+    }
+
+    await runOnce(async () => {
+      try {
+        setSaving(true);
+        const sku = useProductApi ? productSku! : await resolveMedicineId();
+        await persistBarcode(barcode, sku);
+        await Swal.fire({
+          icon: "success",
+          title: "Barcode saved",
+          text: `Barcode ${barcode.trim()} was saved to the product.`,
+          timer: 2500,
+          showConfirmButton: false,
+        });
+      } catch (err) {
+        await Swal.fire({
+          icon: "error",
+          title: "Could not save barcode",
+          text: err instanceof Error ? err.message : "Unknown error",
+        });
+      } finally {
+        setSaving(false);
+      }
+    });
+  };
+
   const handleGenerate = async () => {
     if (barcode?.trim()) {
       await Swal.fire({
         icon: "info",
         title: "Barcode already set",
-        text: "Use Save & download label PDF for the current barcode, or clear the field to generate a new one.",
+        text: "Save the current barcode or clear the field to generate a new one.",
       });
       return;
     }
@@ -57,19 +115,19 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
     await runOnce(async () => {
       try {
         setGenerating(true);
-        const id = await resolveMedicineId();
-        const result = await medicineService.generateBarcode(id);
-        onBarcodeChange?.(result.barcode);
+        const sku = useProductApi ? productSku! : await resolveMedicineId();
+        const result = useProductApi
+          ? await inventoryService.generateProductBarcode(sku)
+          : await medicineService.generateBarcode(sku);
 
-        await medicineService.downloadBarcodeLabelsPdf(
-          id,
-          medicineName ?? result.medicineName ?? "medicine"
-        );
+        const newBarcode = result.barcode ?? "";
+        onBarcodeChange?.(newBarcode);
+        await downloadLabels(sku, displayName);
 
         await Swal.fire({
           icon: "success",
           title: "Barcode ready",
-          text: `Barcode ${result.barcode} was saved and the label PDF was downloaded.`,
+          text: `Barcode ${newBarcode} was saved and the label PDF was downloaded.`,
           timer: 3000,
           showConfirmButton: false,
         });
@@ -98,11 +156,9 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
     await runOnce(async () => {
       try {
         setDownloading(true);
-        const id = await resolveMedicineId();
-        await medicineService.downloadBarcodeLabelsPdf(
-          id,
-          medicineName ?? "medicine"
-        );
+        const sku = useProductApi ? productSku! : await resolveMedicineId();
+        await persistBarcode(barcode, sku);
+        await downloadLabels(sku, displayName);
       } catch (err) {
         await Swal.fire({
           icon: "error",
@@ -116,6 +172,7 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
   };
 
   const hasBarcode = Boolean(barcode?.trim());
+  const busy = generating || downloading || saving;
 
   return (
     <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
@@ -124,7 +181,7 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
           type="button"
           className="btn btn-sm btn-primary"
           onClick={handleGenerate}
-          disabled={disabled || generating || downloading}
+          disabled={disabled || busy}
         >
           {generating ? (
             <>
@@ -132,7 +189,7 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
                 className="spinner-border spinner-border-sm me-1"
                 role="status"
               />
-              Saving & generating…
+              Generating…
             </>
           ) : (
             "Generate barcode"
@@ -142,10 +199,28 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
         <>
           <button
             type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={handleSaveBarcode}
+            disabled={disabled || busy}
+          >
+            {saving ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-1"
+                  role="status"
+                />
+                Saving…
+              </>
+            ) : (
+              "Save barcode"
+            )}
+          </button>
+          <button
+            type="button"
             className="btn btn-sm btn-primary"
             onClick={handleDownload}
-            disabled={disabled || downloading || generating}
-            title="Save medicine and download A4 label sheet"
+            disabled={disabled || busy}
+            title="Save barcode and download A4 label sheet"
           >
             {downloading ? (
               <>
@@ -153,12 +228,12 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
                   className="spinner-border spinner-border-sm me-1"
                   role="status"
                 />
-                Saving & downloading…
+                Downloading…
               </>
             ) : (
               <>
                 <FiDownload className="me-1" size={14} />
-                Save & download label PDF
+                Download label PDF
               </>
             )}
           </button>
@@ -166,8 +241,8 @@ const BarcodeLabelActions: React.FC<BarcodeLabelActionsProps> = ({
       )}
       <span className="text-muted small">
         {hasBarcode
-          ? "Scan or type above, then download labels (medicine is saved automatically)."
-          : "No barcode yet — generate one or scan into the field above."}
+          ? "Update the barcode above, then save or download labels."
+          : "No barcode yet — generate one or enter/scan above."}
       </span>
     </div>
   );
