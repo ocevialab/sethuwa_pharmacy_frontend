@@ -1111,6 +1111,15 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                             }));
                           }
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            // Prevent Enter from submitting the whole purchase form early.
+                            e.preventDefault();
+                            if (supplierSearch.results.length > 0) {
+                              handleSupplierSelect(supplierSearch.results[0]);
+                            }
+                          }
+                        }}
                         disabled={loading}
                         autoComplete="off"
                       />
@@ -1338,6 +1347,22 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                                       ...prev,
                                       showDropdown: true,
                                     }));
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    // Always prevent Enter from submitting the form on this input.
+                                    // Barcode scanners send Enter immediately after the barcode
+                                    // characters, before the 300ms debounce resolves — without this
+                                    // the Enter falls through to <form onSubmit> and submits the
+                                    // whole purchase early (e.g. after the first item is added and
+                                    // supplier/invoice fields are already filled in).
+                                    e.preventDefault();
+                                    if (currentItemSearch.results.length > 0) {
+                                      handleCurrentItemProductSelect(
+                                        currentItemSearch.results[0]
+                                      );
+                                    }
                                   }
                                 }}
                                 disabled={loading}
