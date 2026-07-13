@@ -462,12 +462,16 @@ const MedicineTable: React.FC = () => {
         },
         meta: {
           headerClassName: "text-end",
+          width: "10%",
         },
       },
       {
         accessorKey: "medicineId",
         header: () => "Medicine ID",
         cell: (info: any) => <span className="fw-bold">{info.getValue()}</span>,
+        meta: {
+          width: "12%",
+        },
       },
       {
         accessorKey: "name",
@@ -489,6 +493,9 @@ const MedicineTable: React.FC = () => {
             </Link>
           );
         },
+        meta: {
+          width: "48%",
+        },
       },
       {
         accessorKey: "lowStockThreshold",
@@ -496,6 +503,9 @@ const MedicineTable: React.FC = () => {
         cell: (info: any) => (
           <span className="fw-semibold">{info.getValue()}</span>
         ),
+        meta: {
+          width: "15%",
+        },
       },
       {
         accessorKey: "isDeleted",
@@ -507,6 +517,9 @@ const MedicineTable: React.FC = () => {
               {isDeleted ? "Deleted" : "Active"}
             </span>
           );
+        },
+        meta: {
+          width: "15%",
         },
       },
     ],
@@ -970,6 +983,10 @@ const MedicineTable: React.FC = () => {
                                     (header.column.columnDef.meta as any)
                                       ?.headerClassName
                                   }
+                                  style={{
+                                    width: (header.column.columnDef.meta as any)
+                                      ?.width,
+                                  }}
                                 >
                                   {header.id === "id" ? (
                                     <div className="d-flex gap-2">
@@ -1027,6 +1044,10 @@ const MedicineTable: React.FC = () => {
                                 className={
                                   (cell.column.columnDef.meta as any)?.className
                                 }
+                                style={{
+                                  width: (cell.column.columnDef.meta as any)
+                                    ?.width,
+                                }}
                               >
                                 {flexRender(
                                   cell.column.columnDef.cell,
