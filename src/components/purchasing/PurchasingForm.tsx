@@ -800,12 +800,10 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
             <body>
                 <div class="receipt-container">
                     <div class="header">
-                        <div class="pharmacy-name">THILANKA PHARMACY</div>
+                        <div class="pharmacy-name">SETHSUWA PHARMACY</div>
                         <div class="pharmacy-info">
-                            <b>SPC Franchise Osusala</b><br>
-                            Ambagaha Junction, Dharga Town.<br>
-                            034 2274976<br>
-                            Registration No.: KKK-663
+                            No 47/A, Main Street, Kotiyakumbura<br>
+                            035 2289351 | 078 20 20 157
                         </div>
                     </div>
                     <div class="divider"></div>
