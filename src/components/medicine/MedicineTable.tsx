@@ -491,51 +491,10 @@ const MedicineTable: React.FC = () => {
         },
       },
       {
-        accessorKey: "brandName",
-        header: () => "Brand Name",
-        cell: (info: any) => <span>{info.getValue()}</span>,
-      },
-      {
-        accessorKey: "genericName",
-        header: () => "Generic Name",
-        cell: (info: any) => <span>{info.getValue() || "N/A"}</span>,
-      },
-      {
-        accessorKey: "category",
-        header: () => "Category",
-        cell: (info: any) => (
-          <span className="badge bg-info">{info.getValue()}</span>
-        ),
-      },
-      {
-        accessorKey: "strength",
-        header: () => "Strength",
-        cell: (info: any) => <span>{info.getValue()}</span>,
-      },
-      {
-        accessorKey: "requiredPrescription",
-        header: () => "Prescription",
-        cell: (info: any) => {
-          const required = info.getValue();
-          return (
-            <span className={`badge ${required ? "bg-danger" : "bg-success"}`}>
-              {required ? "Required" : "Not Required"}
-            </span>
-          );
-        },
-      },
-      {
         accessorKey: "lowStockThreshold",
         header: () => "Low Stock Threshold",
         cell: (info: any) => (
           <span className="fw-semibold">{info.getValue()}</span>
-        ),
-      },
-      {
-        accessorKey: "productSku",
-        header: () => "Product SKU",
-        cell: (info: any) => (
-          <span className="badge bg-primary">{info.getValue() || "N/A"}</span>
         ),
       },
       {

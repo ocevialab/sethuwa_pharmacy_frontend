@@ -205,7 +205,7 @@ const Finance: React.FC = () => {
       header: () => "Total Expense",
       cell: (info: any) => (
         <span className="fw-semibold">
-          {info.getValue().toLocaleString()} LKR
+          {(info.getValue() ?? 0).toLocaleString()} LKR
         </span>
       ),
     },
@@ -246,7 +246,7 @@ const Finance: React.FC = () => {
       header: () => "Total Revenue",
       cell: (info: any) => (
         <span className="fw-semibold text-success">
-          {info.getValue().toLocaleString()} LKR
+          {(info.getValue() ?? 0).toLocaleString()} LKR
         </span>
       ),
     },
@@ -962,7 +962,7 @@ const Finance: React.FC = () => {
                         </div>
                       </div>
                       <h4 className="mb-1 fw-bold">
-                        {salesSummaryToday.totalSalesToday.toLocaleString()} LKR
+                        {(salesSummaryToday.totalSalesToday ?? 0).toLocaleString()} LKR
                       </h4>
                       <p className="text-muted mb-0 fs-12">Total Sales Today</p>
                     </div>
@@ -1010,7 +1010,7 @@ const Finance: React.FC = () => {
                         </div>
                       </div>
                       <h4 className="mb-1 fw-bold">
-                        {salesSummaryToday.cashTotal.toLocaleString()} LKR
+                        {(salesSummaryToday.cashTotal ?? 0).toLocaleString()} LKR
                       </h4>
                       <p className="text-muted mb-0 fs-12">Cash Total</p>
                     </div>
@@ -1034,7 +1034,7 @@ const Finance: React.FC = () => {
                         </div>
                       </div>
                       <h4 className="mb-1 fw-bold">
-                        {salesSummaryToday.cardTotal.toLocaleString()} LKR
+                        {(salesSummaryToday.cardTotal ?? 0).toLocaleString()} LKR
                       </h4>
                       <p className="text-muted mb-0 fs-12">Card Total</p>
                     </div>
