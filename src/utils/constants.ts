@@ -142,6 +142,7 @@ export const API_ENDPOINTS = {
     BASE: "/Sales",
     BY_ID: (id: string) => `/Sales/${id}`,
     CREATE_RECEIPT: "/Sales/create-receipt-with-items",
+    UPDATE_DRAFT: (receiptNumber: string) => `/Sales/draft/${receiptNumber}`,
     GET_RECEIPT: (receiptNumber: string) =>
       `/Sales/by-receipt/${receiptNumber}`,
     FINALIZE: (receiptNumber: string) => `/Sales/finalize/${receiptNumber}`,

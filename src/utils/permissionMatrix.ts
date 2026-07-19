@@ -543,6 +543,13 @@ export const PERMISSION_MATRIX: ModulePermissions = {
       httpMethod: "POST",
     },
     {
+      permissionId: "sales:edit_draft",
+      permissionName: "Edit Draft Receipt",
+      description: "Allows editing items on a draft sales receipt (Admin/Owner only)",
+      endpoint: "/api/Sales/draft/{receiptNumber}",
+      httpMethod: "PUT",
+    },
+    {
       permissionId: "sales:finalize_sale",
       permissionName: "Finalize Sale",
       description: "Allows finalizing a draft sale",

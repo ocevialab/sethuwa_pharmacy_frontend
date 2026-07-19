@@ -198,6 +198,25 @@ class SalesService {
     }
   }
 
+  async updateDraftReceipt(
+    receiptNumber: string,
+    receiptData: CreateReceiptRequest
+  ): Promise<{ message: string; salesId: number; receiptNumber: string }> {
+    try {
+      const data = await apiService.put<{
+        message: string;
+        salesId: number;
+        receiptNumber: string;
+      }>(API_ENDPOINTS.SALES.UPDATE_DRAFT(receiptNumber), receiptData);
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Failed to update draft receipt: ${receiptNumber}`);
+    }
+  }
+
   async getReceipt(receiptNumber: string): Promise<Receipt> {
     try {
       const data = await apiService.get<Receipt>(

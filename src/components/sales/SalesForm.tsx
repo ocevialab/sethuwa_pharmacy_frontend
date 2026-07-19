@@ -1,5 +1,5 @@
 import React, { useState, FormEvent, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   salesService,
   CreateReceiptRequest,
@@ -38,6 +38,10 @@ const STORAGE_KEY = "sales_cart_items";
 
 const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editReceiptNumber = searchParams.get("edit");
+  const isEditMode = !!editReceiptNumber;
+  const [loadingDraft, setLoadingDraft] = useState(isEditMode);
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [currentItem, setCurrentItem] = useState<CartItem>({
@@ -84,8 +88,9 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
     receiptNumber: string;
   } | null>(null);
 
-  // Load items from localStorage on mount
+  // Load items from localStorage on mount (skipped in edit mode — the draft's own items are loaded instead)
   useEffect(() => {
+    if (isEditMode) return;
     const savedItems = localStorage.getItem(STORAGE_KEY);
     if (savedItems) {
       try {
@@ -95,16 +100,97 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
         console.error("Error loading cart from localStorage:", error);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save items to localStorage whenever items change
+  // Save items to localStorage whenever items change (skipped in edit mode to avoid
+  // clobbering an unrelated in-progress "create receipt" cart with draft-edit items)
   useEffect(() => {
+    if (isEditMode) return;
     if (items.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, [items]);
+  }, [items, isEditMode]);
+
+  // Load the draft receipt's items when opened in edit mode (?edit=<receiptNumber>)
+  useEffect(() => {
+    if (!editReceiptNumber) return;
+
+    let isMounted = true;
+
+    const loadDraft = async () => {
+      try {
+        setLoadingDraft(true);
+        const receipt = await salesService.getReceipt(editReceiptNumber);
+
+        if (receipt.saleStatus !== "Draft") {
+          Swal.fire({
+            icon: "warning",
+            title: "Cannot Edit",
+            text: "Only draft receipts can be edited. This receipt is no longer a draft.",
+          });
+          navigate("/sales/list");
+          return;
+        }
+
+        // Fetch current available stock per SKU and add back the quantity already
+        // reserved by this draft (it will be restored on save before re-deducting).
+        const draftItems = await Promise.all(
+          receipt.items.map(async (item): Promise<CartItem> => {
+            let totalQuantityOnHand: number | undefined = undefined;
+            try {
+              const details = await inventoryService.getItemDetails(
+                item.productSku
+              );
+              totalQuantityOnHand =
+                details.totalQuantityOnHand + item.quantity;
+            } catch (err) {
+              console.error(
+                `Failed to fetch stock details for ${item.productSku}:`,
+                err
+              );
+            }
+
+            return {
+              productSku: item.productSku,
+              quantity: item.quantity,
+              subTotal: item.subTotal,
+              productName: item.productName,
+              sellingPrice: item.price,
+              totalQuantityOnHand,
+            };
+          })
+        );
+
+        if (isMounted) {
+          setItems(draftItems);
+        }
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text:
+            error instanceof Error
+              ? error.message
+              : "Failed to load draft receipt",
+        });
+        navigate("/sales/list");
+      } finally {
+        if (isMounted) {
+          setLoadingDraft(false);
+        }
+      }
+    };
+
+    loadDraft();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editReceiptNumber]);
 
   // Product search handler
   const handleProductSearch = async (query: string) => {
@@ -358,6 +444,22 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
         totalAmount: calculateTotalAmount(),
       };
 
+      if (isEditMode && editReceiptNumber) {
+        const result = await salesService.updateDraftReceipt(
+          editReceiptNumber,
+          receiptData
+        );
+
+        setItems([]);
+        setReceiptData({
+          message: "Draft receipt updated successfully",
+          salesId: result.salesId,
+          receiptNumber: result.receiptNumber,
+        });
+        setShowReceiptModal(true);
+        return;
+      }
+
       const receipt = await salesService.createReceipt(receiptData);
 
       // Clear local storage after successful creation
@@ -377,7 +479,11 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
         icon: "error",
         title: "Error",
         text:
-          error instanceof Error ? error.message : "Failed to create receipt",
+          error instanceof Error
+            ? error.message
+            : isEditMode
+            ? "Failed to update draft receipt"
+            : "Failed to create receipt",
       });
     } finally {
       setLoading(false);
@@ -597,6 +703,13 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
     setShowReceiptModal(false);
     setReceiptData(null);
 
+    // After editing a draft, always return to the sales list — there's nothing to
+    // reset back into on this page since it was opened for a specific receipt.
+    if (isEditMode) {
+      navigate("/sales/list");
+      return;
+    }
+
     // If role is DISPENSER, stay on Create New Receipt page (reset form)
     if (userRole === "DISPENSER") {
       // Reset form state to allow creating a new receipt
@@ -665,9 +778,15 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
               <FiShoppingBag size={18} className="text-primary" />
             </div>
             <div>
-              <h5 className="card-title mb-1 fw-bold">Create New Receipt</h5>
+              <h5 className="card-title mb-1 fw-bold">
+                {isEditMode
+                  ? `Edit Draft Receipt ${editReceiptNumber}`
+                  : "Create New Receipt"}
+              </h5>
               <p className="text-muted mb-0 fs-12">
-                Create a new sales receipt with items
+                {isEditMode
+                  ? "Update items on this draft receipt"
+                  : "Create a new sales receipt with items"}
               </p>
             </div>
           </div>
@@ -1269,8 +1388,10 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                         role="status"
                         aria-hidden="true"
                       ></span>
-                      Creating...
+                      {isEditMode ? "Updating..." : "Creating..."}
                     </>
+                  ) : isEditMode ? (
+                    "Update Receipt"
                   ) : (
                     "Create Receipt"
                   )}
@@ -1280,6 +1401,19 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
           </form>
         </div>
       </div>
+
+      {/* Draft loading indicator */}
+      {loadingDraft && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ zIndex: 2000, background: "rgba(0,0,0,0.3)" }}
+        >
+          <div className="bg-white rounded p-4 text-center shadow">
+            <div className="spinner-border text-primary mb-2" role="status" />
+            <div className="small">Loading draft receipt...</div>
+          </div>
+        </div>
+      )}
 
       {/* Batch loading indicator */}
       {batchPicker.loading && (
@@ -1391,7 +1525,9 @@ const SalesForm: React.FC<SalesFormProps> = ({ onSuccess }) => {
                 <div className="modal-header bg-success text-white">
                   <h5 className="modal-title fw-bold" id="receiptModalLabel">
                     <FiCheckCircle className="me-2" />
-                    Receipt Created Successfully
+                    {isEditMode
+                      ? "Draft Receipt Updated Successfully"
+                      : "Receipt Created Successfully"}
                   </h5>
                   <button
                     type="button"

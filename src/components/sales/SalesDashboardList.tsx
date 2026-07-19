@@ -1,13 +1,22 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { salesService, SalesListItem } from '@/services/salesService';
 import Swal from 'sweetalert2';
-import { FiChevronLeft, FiChevronRight, FiSearch } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiSearch, FiEdit3 } from 'react-icons/fi';
+import { useAuth } from '@/context/AuthContext';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
 
 export type SaleStatus = 'All' | 'Paid' | 'Unpaid' | 'Draft' | 'Cancelled';
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 30, 50];
 const DEFAULT_PAGE_SIZE = 10;
 const POLLING_INTERVAL = 5000; // 5 seconds
+
+/** Matches API: "Owner", case-insensitive */
+function isOwnerRole(role: unknown): boolean {
+  if (role == null) return false;
+  return String(role).trim().toLowerCase() === 'owner';
+}
 
 interface SalesDashboardListProps {
   selectedReceiptNumber: string | null;
@@ -20,6 +29,11 @@ const SalesDashboardList: React.FC<SalesDashboardListProps> = ({
   onSelectReceipt,
   refreshTrigger = 0,
 }) => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { userPermissions } = useUserPermissions();
+  const canEditDraft = isOwnerRole(user?.role) || userPermissions.includes('sales:edit_draft');
+
   const [selectedStatus, setSelectedStatus] = useState<SaleStatus>('Draft');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sales, setSales] = useState<SalesListItem[]>([]);
@@ -374,15 +388,18 @@ const SalesDashboardList: React.FC<SalesDashboardListProps> = ({
                     <th scope="col" className="border-0">
                       Status
                     </th>
-                    <th scope="col" className="border-0 text-end pe-3">
+                    <th scope="col" className="border-0 text-end">
                       Date
+                    </th>
+                    <th scope="col" className="border-0 text-end pe-3">
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {sales.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="text-center text-muted py-4 ps-3 pe-3">
+                      <td colSpan={4} className="text-center text-muted py-4 ps-3 pe-3">
                         No {selectedStatus === 'All' ? '' : selectedStatus} receipts found.
                       </td>
                     </tr>
@@ -426,8 +443,23 @@ const SalesDashboardList: React.FC<SalesDashboardListProps> = ({
                               {sale.saleStatus}
                             </span>
                           </td>
-                          <td className="text-end pe-3">
+                          <td className="text-end">
                             {formatDate(sale.date)}
+                          </td>
+                          <td className="text-end pe-3">
+                            {sale.saleStatus === 'Draft' && canEditDraft && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                title="Edit draft receipt"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/sales/create?edit=${sale.receiptNumber}`);
+                                }}
+                              >
+                                <FiEdit3 size={14} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
