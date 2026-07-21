@@ -1,12 +1,16 @@
 import React, { memo, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import DashboardTable from "@/components/dashboard/DashboardTable";
 import { FiMoreHorizontal, FiEye, FiEdit3, FiRotateCw, FiFilter, FiSearch, FiRefreshCw } from "react-icons/fi";
-import Dropdown from "@/components/shared/Dropdown";
 import { useNavigate, Link } from "react-router-dom";
 import { purchasingService, Purchase } from "@/services/purchasingService";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import Swal from "sweetalert2";
 
 const PurchasingTable: React.FC = () => {
+  const { userPermissions } = useUserPermissions();
+  const canEditPurchase = userPermissions.includes("purchasing:edit_purchase");
+
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [allPurchases, setAllPurchases] = useState<Purchase[]>([]); // Store all fetched purchases for searching
   const [loading, setLoading] = useState(true); // Initial loading state
@@ -38,6 +42,42 @@ const PurchasingTable: React.FC = () => {
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom actions menu (not the shared Bootstrap Dropdown). Rendered via a portal into
+  // document.body and positioned with `fixed` using the trigger's real screen coordinates,
+  // so it can never be clipped or mis-positioned by the table's own overflow/stacking context
+  // (which is what broke the theme's normal dropup/Popper-based positioning here).
+  const [openActionMenu, setOpenActionMenu] = useState<{
+    purchaseId: string;
+    bottom: number;
+    right: number;
+  } | null>(null);
+  const openActionMenuRef = useRef<HTMLUListElement | null>(null);
+
+  useEffect(() => {
+    if (!openActionMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest(".purchasing-actions-trigger")) return; // let the trigger's own onClick handle toggling
+      if (
+        openActionMenuRef.current &&
+        !openActionMenuRef.current.contains(target)
+      ) {
+        setOpenActionMenu(null);
+      }
+    };
+    const handleScroll = () => setOpenActionMenu(null);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleScroll);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [openActionMenu]);
 
   // Custom filter actions for purchasing
   const purchasingFilterActions = [
@@ -588,6 +628,7 @@ const PurchasingTable: React.FC = () => {
       cell: (info: any) => {
         const purchaseId = info.row.original.purchaseId;
         const paymentStatus = info.row.original.paymentStatus;
+        const isMenuOpen = openActionMenu?.purchaseId === purchaseId;
         const actions = [
           {
             label: "View Details",
@@ -596,12 +637,23 @@ const PurchasingTable: React.FC = () => {
               navigate(`/purchasing/view?id=${purchaseId}`);
             },
           },
+          ...(canEditPurchase
+            ? [
+                {
+                  label: "Edit Purchase",
+                  icon: <FiEdit3 />,
+                  onClick: () => {
+                    navigate(`/purchasing/create?edit=${purchaseId}`);
+                  },
+                },
+              ]
+            : []),
           {
             label: "Update Payment Status",
             icon: <FiEdit3 />,
             onClick: () => handleUpdatePaymentStatus(purchaseId, paymentStatus),
           },
-        ] as any[];
+        ];
 
         return (
           <div className="hstack gap-2 justify-content-end">
@@ -616,23 +668,65 @@ const PurchasingTable: React.FC = () => {
             >
               <FiEye />
             </a>
-            <Dropdown
-              dropdownItems={actions}
-              triggerClass="avatar-md"
-              triggerPosition={"0,21"}
-              triggerIcon={<FiMoreHorizontal />}
-              isAvatar={true}
-              dropdownAutoClose={true}
-              triggerText=""
-              dropdownParentStyle=""
-              tooltipTitle=""
-              dropdownMenuStyle=""
-              iconStrokeWidth={1.7}
-              isItemIcon={true}
-              onClick={() => {}}
-              active=""
-              id=""
-            />
+            <a
+              href="#"
+              className="avatar-text avatar-md purchasing-actions-trigger"
+              title="More actions"
+              onClick={(e) => {
+                e.preventDefault();
+                if (isMenuOpen) {
+                  setOpenActionMenu(null);
+                  return;
+                }
+                const rect = e.currentTarget.getBoundingClientRect();
+                setOpenActionMenu({
+                  purchaseId,
+                  bottom: window.innerHeight - rect.top + 8,
+                  right: window.innerWidth - rect.right,
+                });
+              }}
+            >
+              <FiMoreHorizontal />
+            </a>
+            {isMenuOpen &&
+              openActionMenu &&
+              createPortal(
+                <ul
+                  ref={openActionMenuRef}
+                  className="dropdown-menu dropdown-menu-end show"
+                  style={{
+                    position: "fixed",
+                    top: "auto",
+                    left: "auto",
+                    bottom: openActionMenu.bottom,
+                    right: openActionMenu.right,
+                    margin: 0,
+                    zIndex: 2000,
+                  }}
+                >
+                  {actions.map((action, index) => (
+                    <li key={index}>
+                      <a
+                        href="#"
+                        className="dropdown-item"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setOpenActionMenu(null);
+                          action.onClick();
+                        }}
+                      >
+                        {React.cloneElement(action.icon, {
+                          className: "me-3",
+                          size: 16,
+                          strokeWidth: 1.7,
+                        })}
+                        <span>{action.label}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>,
+                document.body
+              )}
           </div>
         );
       },

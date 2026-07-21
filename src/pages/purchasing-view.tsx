@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { purchasingService, Purchase } from '@/services/purchasingService';
 import { supplierService, Supplier } from '@/services/supplierService';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
 import Swal from 'sweetalert2';
 import PageHeader from '@/components/shared/pageHeader/PageHeader';
 import Footer from '@/components/shared/Footer';
@@ -12,6 +13,8 @@ const PurchasingView: React.FC = () => {
     const [searchParams] = useSearchParams();
     const purchaseId = searchParams.get('id');
     const navigate = useNavigate();
+    const { userPermissions } = useUserPermissions();
+    const canEditPurchase = userPermissions.includes('purchasing:edit_purchase');
 
     const [purchase, setPurchase] = useState<Purchase | null>(null);
     const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -670,14 +673,26 @@ const PurchasingView: React.FC = () => {
                                             <p className="text-muted mb-0 fs-12">Purchase ID: {purchase.purchaseId}</p>
                                         </div>
                                     </div>
-                                    <button
-                                        className="btn btn-sm btn-primary"
-                                        onClick={printReceipt}
-                                        title="Print Purchase Receipt"
-                                    >
-                                        <FiPrinter className="me-1" />
-                                        Print Receipt
-                                    </button>
+                                    <div className="d-flex gap-2">
+                                        {canEditPurchase && (
+                                            <button
+                                                className="btn btn-sm btn-outline-primary"
+                                                onClick={() => navigate(`/purchasing/create?edit=${purchase.purchaseId}`)}
+                                                title="Edit Purchase"
+                                            >
+                                                <FiEdit3 className="me-1" />
+                                                Edit
+                                            </button>
+                                        )}
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            onClick={printReceipt}
+                                            title="Print Purchase Receipt"
+                                        >
+                                            <FiPrinter className="me-1" />
+                                            Print Receipt
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="card-body">

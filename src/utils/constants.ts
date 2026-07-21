@@ -131,6 +131,7 @@ export const API_ENDPOINTS = {
   PURCHASING: {
     BASE: "/Purchasing",
     BY_ID: (id: string) => `/Purchasing/${id}`,
+    EDIT_PURCHASE: (id: string) => `/Purchasing/${id}`,
     BY_SUPPLIER: (supplierId: string) =>
       `/Purchasing/by-supplier/${supplierId}`,
     UPDATE_PAYMENT_STATUS: (id: string) => `/Purchasing/${id}/payment-status`,

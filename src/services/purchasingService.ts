@@ -2,6 +2,7 @@ import { apiService } from "./api";
 import { API_ENDPOINTS } from "@/utils/constants";
 
 export interface PurchaseItem {
+  purchaseItemId?: number; // Present on items loaded from an existing purchase; omitted for newly added items
   productSKU: string;
   productName?: string; // Optional: for display purposes only, not sent to API
   costPrice: number;
@@ -31,6 +32,24 @@ export interface CreatePurchaseRequest {
   totalAmount: number;
   supplierId: string;
   items: PurchaseItem[];
+}
+
+export interface EditPurchaseItemRequest {
+  purchaseItemId?: number; // omit/undefined to add a brand-new line item
+  productSKU: string;
+  costPrice: number;
+  sellingPrice: number;
+  quantity: number;
+  expireDate: string;
+}
+
+export interface EditPurchaseRequest {
+  invoiceNumber: string;
+  invoiceDate: string;
+  paymentDueDate: string | null;
+  supplierId: string;
+  totalAmount: number;
+  items: EditPurchaseItemRequest[];
 }
 
 export interface UpdatePaymentStatusRequest {
@@ -163,6 +182,24 @@ class PurchasingService {
         throw error;
       }
       throw new Error("Failed to create purchase");
+    }
+  }
+
+  async editPurchase(
+    purchaseId: string,
+    purchaseData: EditPurchaseRequest
+  ): Promise<{ message: string; purchaseId: string }> {
+    try {
+      const data = await apiService.put<{ message: string; purchaseId: string }>(
+        API_ENDPOINTS.PURCHASING.EDIT_PURCHASE(purchaseId),
+        purchaseData
+      );
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Failed to update purchase with ID: ${purchaseId}`);
     }
   }
 

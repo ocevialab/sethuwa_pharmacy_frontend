@@ -449,6 +449,13 @@ export const PERMISSION_MATRIX: ModulePermissions = {
       httpMethod: "POST",
     },
     {
+      permissionId: "purchasing:edit_purchase",
+      permissionName: "Edit Purchase",
+      description: "Allows editing an existing purchase's items and details, subject to stock-safety checks",
+      endpoint: "/api/Purchasing/{purchaseId}",
+      httpMethod: "PUT",
+    },
+    {
       permissionId: "purchasing:get_by_id",
       permissionName: "View Purchase Details",
       description: "Get purchase by ID",

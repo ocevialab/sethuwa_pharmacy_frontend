@@ -1,8 +1,9 @@
 import React, { useState, FormEvent, useEffect, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   purchasingService,
   CreatePurchaseRequest,
+  EditPurchaseRequest,
   PurchaseItem,
   Purchase,
 } from "@/services/purchasingService";
@@ -32,9 +33,25 @@ const STORAGE_KEY = "purchasing_form_draft";
 
 const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editPurchaseId = searchParams.get("edit");
+  const isEditMode = !!editPurchaseId;
 
   // Helper function to get initial form data (either from localStorage or defaults)
+  // Edit mode never reads the create-flow's localStorage draft — it's populated from the
+  // existing purchase instead (see the load-purchase effect below).
   const getInitialFormData = (): Omit<CreatePurchaseRequest, "items"> => {
+    if (isEditMode) {
+      return {
+        invoiceNumber: "",
+        invoiceDate: new Date().toISOString().split("T")[0],
+        paymentStatus: "Pending",
+        paymentDueDate: new Date().toISOString().split("T")[0],
+        paymentMethod: "Bank Transfer",
+        totalAmount: 0,
+        supplierId: "",
+      };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -63,6 +80,7 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
 
   // Helper function to get initial items (either from localStorage or empty array)
   const getInitialItems = (): PurchaseItem[] => {
+    if (isEditMode) return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -106,6 +124,14 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
 
   // Helper function to get initial supplier search state
   const getInitialSupplierSearch = () => {
+    if (isEditMode) {
+      return {
+        query: "",
+        results: [],
+        showDropdown: false,
+        selectedSupplier: null,
+      };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -141,6 +167,7 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [loadingPurchase, setLoadingPurchase] = useState(isEditMode);
   const [createdPurchase, setCreatedPurchase] = useState<Purchase | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [submittedPurchaseData, setSubmittedPurchaseData] =
@@ -160,13 +187,16 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
       newErrors.invoiceDate = "Invoice date is required";
     }
 
-    // Only require payment due date if payment status is Pending
-    if (formData.paymentStatus === "Pending" && !formData.paymentDueDate) {
-      newErrors.paymentDueDate = "Payment due date is required";
-    }
+    // Payment status/method/due date are not editable in edit mode (use the dedicated
+    // payment-status endpoint instead), so skip validating them here.
+    if (!isEditMode) {
+      if (formData.paymentStatus === "Pending" && !formData.paymentDueDate) {
+        newErrors.paymentDueDate = "Payment due date is required";
+      }
 
-    if (!formData.paymentMethod.trim()) {
-      newErrors.paymentMethod = "Payment method is required";
+      if (!formData.paymentMethod.trim()) {
+        newErrors.paymentMethod = "Payment method is required";
+      }
     }
 
     if (!formData.supplierId.trim()) {
@@ -199,6 +229,30 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
 
     try {
       setLoading(true);
+
+      if (isEditMode && editPurchaseId) {
+        const editData: EditPurchaseRequest = {
+          invoiceNumber: formData.invoiceNumber,
+          invoiceDate: formData.invoiceDate,
+          paymentDueDate: formData.paymentDueDate || null,
+          supplierId: formData.supplierId,
+          totalAmount: formData.totalAmount,
+          items: items.map(({ productName, ...item }) => item),
+        };
+
+        await purchasingService.editPurchase(editPurchaseId, editData);
+
+        await Swal.fire({
+          icon: "success",
+          title: "Purchase Updated",
+          text: "The purchase has been updated successfully.",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+
+        navigate(`/purchasing/view?id=${editPurchaseId}`);
+        return;
+      }
 
       // Remove productName before sending to API (it's only for UI display)
       // Set paymentDueDate based on payment status:
@@ -517,8 +571,81 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
     }
   }, []); // Only run on mount
 
-  // Save form data to localStorage whenever formData, items, or supplierSearch changes
+  // Load the existing purchase's details and items when opened in edit mode
   useEffect(() => {
+    if (!editPurchaseId) return;
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        setLoadingPurchase(true);
+        const purchase = await purchasingService.getPurchaseById(editPurchaseId);
+        if (isCancelled) return;
+
+        setFormData({
+          invoiceNumber: purchase.invoiceNumber,
+          invoiceDate: purchase.invoiceDate.split("T")[0],
+          paymentStatus: purchase.paymentStatus,
+          paymentDueDate: purchase.paymentDueDate
+            ? purchase.paymentDueDate.split("T")[0]
+            : "",
+          paymentMethod: purchase.paymentMethod || "",
+          totalAmount: purchase.totalAmount,
+          supplierId: purchase.supplierId,
+        });
+
+        setItems(
+          purchase.purchaseItems.map((item) => ({
+            ...item,
+            expireDate: item.expireDate.split("T")[0],
+          }))
+        );
+
+        try {
+          const supplier = await supplierService.getSupplierById(purchase.supplierId);
+          if (isCancelled) return;
+          const supplierResult: SupplierSearchResult = {
+            supplierId: supplier.supplierId || purchase.supplierId,
+            supplierName: supplier.supplierName,
+            contactPerson: supplier.contactPerson,
+            contactNumber: supplier.contactNumber,
+            emailAddress: supplier.emailAddress,
+          };
+          setSupplierSearch({
+            query: supplier.supplierName,
+            results: [],
+            showDropdown: false,
+            selectedSupplier: supplierResult,
+          });
+        } catch (supplierErr) {
+          console.error("Failed to load supplier for editing purchase:", supplierErr);
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text:
+            error instanceof Error
+              ? error.message
+              : "Failed to load purchase for editing",
+        }).then(() => navigate("/purchasing/list"));
+      } finally {
+        if (!isCancelled) setLoadingPurchase(false);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editPurchaseId]);
+
+  // Save form data to localStorage whenever formData, items, or supplierSearch changes
+  // (skipped in edit mode so it never overwrites the create-flow's saved draft)
+  useEffect(() => {
+    if (isEditMode) return;
     try {
       const dataToSave = {
         formData,
@@ -1001,6 +1128,17 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
           color: #ffffff !important;
         }
       `}</style>
+      {loadingPurchase && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ zIndex: 2000, background: "rgba(0,0,0,0.3)" }}
+        >
+          <div className="bg-white rounded p-4 text-center shadow">
+            <div className="spinner-border text-primary mb-2" role="status" />
+            <div className="small">Loading purchase...</div>
+          </div>
+        </div>
+      )}
       <div className="col-lg-12">
         <div className="card">
           <div className="card-header">
@@ -1009,9 +1147,13 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                 <FiShoppingCart size={18} className="text-primary" />
               </div>
               <div>
-                <h5 className="card-title mb-1 fw-bold">Create New Purchase</h5>
+                <h5 className="card-title mb-1 fw-bold">
+                  {isEditMode ? `Edit Purchase ${editPurchaseId}` : "Create New Purchase"}
+                </h5>
                 <p className="text-muted mb-0 fs-12">
-                  Add a new purchase order to the system
+                  {isEditMode
+                    ? "Update this purchase's items and details"
+                    : "Add a new purchase order to the system"}
                 </p>
               </div>
             </div>
@@ -1201,7 +1343,7 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                     value={formData.paymentStatus}
                     onChange={handleChange}
                     required
-                    disabled={loading}
+                    disabled={loading || isEditMode}
                   >
                     <option value="Pending">Pending</option>
                     <option value="Complete">Complete</option>
@@ -1212,12 +1354,18 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                       {errors.paymentStatus}
                     </div>
                   )}
+                  {isEditMode && (
+                    <small className="text-muted">
+                      Use "Update Payment Status" on the purchase details page to change this
+                    </small>
+                  )}
                 </div>
 
                 {formData.paymentStatus === "Pending" && (
                   <div className="col-md-6 mb-3">
                     <label htmlFor="paymentDueDate" className="form-label">
-                      Payment Due Date <span className="text-danger">*</span>
+                      Payment Due Date{" "}
+                      {!isEditMode && <span className="text-danger">*</span>}
                     </label>
                     <input
                       type="date"
@@ -1228,7 +1376,7 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                       }`}
                       value={formData.paymentDueDate || ""}
                       onChange={handleChange}
-                      required
+                      required={!isEditMode}
                       disabled={loading}
                     />
                     {errors.paymentDueDate && (
@@ -1241,7 +1389,8 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
 
                 <div className="col-md-6 mb-3">
                   <label htmlFor="paymentMethod" className="form-label">
-                    Payment Method <span className="text-danger">*</span>
+                    Payment Method{" "}
+                    {!isEditMode && <span className="text-danger">*</span>}
                   </label>
                   <select
                     id="paymentMethod"
@@ -1251,8 +1400,8 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                     }`}
                     value={formData.paymentMethod}
                     onChange={handleChange}
-                    required
-                    disabled={loading}
+                    required={!isEditMode}
+                    disabled={loading || isEditMode}
                   >
                     <option value="">Select payment method</option>
                     <option value="Cash">Cash</option>
@@ -1264,6 +1413,11 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                     <div className="invalid-feedback">
                       {errors.paymentMethod}
                     </div>
+                  )}
+                  {isEditMode && (
+                    <small className="text-muted">
+                      Not editable here
+                    </small>
                   )}
                 </div>
 
@@ -1727,6 +1881,10 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                   type="button"
                   className="btn btn-light"
                   onClick={() => {
+                    if (isEditMode && editPurchaseId) {
+                      navigate(`/purchasing/view?id=${editPurchaseId}`);
+                      return;
+                    }
                     // Clear form data before navigating
                     clearFormData();
                     setSavedSupplierInfo(null);
@@ -1740,7 +1898,7 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={loading}
+                  disabled={loading || loadingPurchase}
                 >
                   {loading ? (
                     <>
@@ -1749,8 +1907,10 @@ const PurchasingForm: React.FC<PurchasingFormProps> = ({ onSuccess }) => {
                         role="status"
                         aria-hidden="true"
                       ></span>
-                      Creating...
+                      {isEditMode ? "Saving..." : "Creating..."}
                     </>
+                  ) : isEditMode ? (
+                    "Save Changes"
                   ) : (
                     "Create Purchase"
                   )}
